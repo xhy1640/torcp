@@ -754,7 +754,7 @@ class Torcp:
         if self.ARGS.after_copy_script:
             import subprocess        
             cmd = [self.ARGS.after_copy_script, exportTargetDir, self.CUR_MEDIA_NAME, tmdbidstr, tmdbcat, tmdbtitle]
-            subprocess.Popen(cmd).wait()
+            subprocess.Popen(cmd)
             # os.system("%s %s" % (ARGS.next_script, targetDir))
         return
 
