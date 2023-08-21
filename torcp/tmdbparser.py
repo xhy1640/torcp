@@ -60,6 +60,7 @@ class TMDbNameParser():
         self.title = ''
         self.year = 0
         self.tmdbid = 0
+        self.tmdbhard = False
         self.season = ''
         self.episode = ''
         self.cntitle = ''
@@ -85,6 +86,7 @@ class TMDbNameParser():
         self.title = ''
         self.year = 0
         self.tmdbid = -1
+        self.tmdbhard = False
         self.season = ''
         self.episode = ''
         self.cntitle = ''
@@ -128,11 +130,13 @@ class TMDbNameParser():
                         if tmdbstr:
                             tmdbid, title, year = self.searchTMDbByTMDbId(cat, tmdbstr)
                             if tmdbid > 0:
+                                self.tmdbhard = True
                                 logger.info("%s %s %s %s" % (tmdbid, title, self.ccfcat, self.year))
                                 return True
                     if hasIMDbId:
                         tmdbid, title, year = self.searchTMDbByIMDbId(hasIMDbId)
                         if tmdbid > 0:
+                            self.tmdbhard = True
                             logger.info("%s %s %s %s" % (tmdbid, title, self.ccfcat, self.year))
                             # print(tmdbid, title, self.ccfcat, self.year)
                             return
@@ -526,15 +530,17 @@ class TMDbNameParser():
 
     # TODO: to be continue
     def checkNameContainsId(self, torname):
-        m = re.search(r'\[imdb(id)?\=(tt\d+)\]', torname, flags=re.A | re.I)
+        m = re.search(r'[\[{]]imdb(id)?\=(tt\d+)[\]}]', torname, flags=re.A | re.I)
         if m:
             tmdbid, title, year = self.searchTMDbByIMDbId(m[2])
             if tmdbid > 0:
+                self.tmdbhard = True
                 return True
-        m = re.search(r'\[tmdb(id)?[=-](\d+)\]', torname, flags=re.A | re.I)
+        m = re.search(r'[\[{]tmdb(id)?[=-](\d+)[\]}]', torname, flags=re.A | re.I)
         if m:
             tmdbid, title, year = self.searchTMDbByTMDbId(self.tmdbcat, m[2])
             if tmdbid > 0:
+                self.tmdbhard = True
                 return True
         return False
 

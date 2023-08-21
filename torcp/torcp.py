@@ -24,7 +24,7 @@ from torcp.tmdbparser import TMDbNameParser
 from torcp.torcategory import TorCategory
 from torcp.tortitle import TorTitle, is0DayName
 from torcp.cacheman import CacheManager
-
+import xml.etree.ElementTree as ET
 
 def area2dir(arecode):
     AREADICT = {
@@ -495,6 +495,7 @@ class Torcp:
                     self.targetCopy(tvitemPath, seasonFolderFullPath, newTVFileName)
 
         self.mkPlexMatch(os.path.join(self.CATNAME_TV, genFolder), folderTmdbParser)
+        self.mkMediaNfo(os.path.join(self.CATNAME_TV, genFolder), "", folderTmdbParser)
         self.targetDirHook(os.path.join(self.CATNAME_TV, genFolder), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
 
     def cutOriginName(self, srcOriginName):
@@ -505,9 +506,9 @@ class Torcp:
         if m1:
             sstr = srcOriginName[m1.span(1)[0]:]
         else:
-            m2 = re.search( r'\b((19\d{2}\b|20\d{2})(-19\d{2}|-20\d{2})?)\b(?!.*\b\d{4}\b.*)', srcOriginName, flags=re.A | re.I)
+            m2 = re.search( r'([\(\[]?((19\d{2}\b|20\d{2})(-19\d{2}|-20\d{2})?)[\)\]]?)(?!.*\b\d{4}\b.*)', srcOriginName, flags=re.A | re.I)
             if m2:
-                sstr = sstr[m2.span(1)[1]:]
+                sstr = sstr[m2.span(1)[1]:].strip()
         sstr = re.sub(r'^[. ]*', '', sstr)
         sstr = re.sub(r'-', '_', sstr)
         return sstr
@@ -685,7 +686,7 @@ class Torcp:
 
             p = folderTmdbParser
             if not (self.ARGS.tmdbid and self.ARGS.single):
-                if (folderTmdbParser.tmdbid <= 0) or countMediaFiles > 1:
+                if not folderTmdbParser.tmdbhard and (folderTmdbParser.tmdbid <= 0) or countMediaFiles > 1:
                     fnok = is0DayName(movieItem)
                     if fnok:
                         pf = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang,
@@ -729,6 +730,7 @@ class Torcp:
                     newMovieName = self.genMovieResGroup(movieItem, p.title, yearstr,
                                                     p.resolution, p.group, nameParser=p)
                 self.targetCopy(mediaSrcItem, destCatFolderName, newMovieName)
+                self.mkMediaNfo(destCatFolderName, newMovieName, p)
                 self.targetDirHook(destCatFolderName, tmdbidstr=str(p.tmdbid), tmdbcat=p.tmdbcat, tmdbtitle=p.title, tmdbobj=p)
 
     def mkPlexMatch(self, targetDir, tmdbParser):
@@ -739,11 +741,76 @@ class Torcp:
             return
 
         pmfilepath = os.path.join(self.ARGS.hd_path, targetDir, '.plexmatch')
-        with open(pmfilepath, "w") as pmfile:
+        with open(pmfilepath, "w", encoding='utf-8') as pmfile:
             pmfile.write("Title: %s\ntmdbid: %d\n" %
                         (tmdbParser.title, tmdbParser.tmdbid))
             if tmdbParser.year > 1990:
                 pmfile.write("Year: %d\n" % (tmdbParser.year))
+
+    def writeNfoFile(self, nfoFilename, etroot):
+        # ET.indent(etroot, '  ')
+        # etroot.write(nfoFilename, encoding="utf-8", xml_declaration=True)
+        with open(nfoFilename, "w", encoding='utf-8') as nfo_file:
+            nfo_file.write(ET.tostring(etroot, encoding="unicode"))
+
+    def mkMediaNfo(self, targetDir, mediaFilename, tmdbParser):
+        if not self.ARGS.make_nfo:
+            return
+        if not tmdbParser:
+            return
+        if tmdbParser.tmdbid < 0:
+            return
+        
+        if tmdbParser.tmdbcat == 'tv':
+            root = ET.Element("tvshow")
+            nfoFilename = 'tvshow.nfo'
+        elif tmdbParser.tmdbcat == 'movie':
+            root = ET.Element("movie")
+            fn, ext = os.path.splitext(mediaFilename)
+            nfoFilename = fn + ".nfo"
+        else:
+            return
+        
+        title = ET.SubElement(root, "title")
+        title.text = tmdbParser.title
+
+        year = ET.SubElement(root, "year")
+        year.text = str(tmdbParser.year)
+
+        tmdbid = ET.SubElement(root, "tmdbid")
+        tmdbid.text = str(tmdbParser.tmdbid)
+
+        if not tmdbParser.tmdbDetails:
+            tmdbParser.getDetails()
+        if hasattr(tmdbParser.tmdbDetails, 'original_title'):
+            originaltitle = ET.SubElement(root, "originaltitle")
+            originaltitle.text = tmdbParser.tmdbDetails.original_title
+
+        # if hasattr(tmdbParser.tmdbDetails, 'original_language'):
+        #     originaltitle = ET.SubElement(root, "original_language")
+        #     originaltitle.text = tmdbParser.tmdbDetails.original_title
+
+        if hasattr(tmdbParser.tmdbDetails, 'overview'):
+            plot = ET.SubElement(root, "plot")
+            plot.text = tmdbParser.tmdbDetails.overview
+
+        if hasattr(tmdbParser.tmdbDetails, 'vote_average'):
+            rating = ET.SubElement(root, "rating")
+            rating.text = str(tmdbParser.tmdbDetails.vote_average)
+
+        if hasattr(tmdbParser.tmdbDetails, "genres"):
+            genre = ET.SubElement(root, "genre")
+            for genre_detail in tmdbParser.tmdbDetails.genres:
+                genre_item = ET.SubElement(genre, "item")
+                genre_item.text = genre_detail["name"]
+
+        mediaDir = self.getDestDir(targetDir)
+        if not os.path.exists(mediaDir):
+            logger.warning('media dir not created: ' + mediaDir)
+            # self.ensureDir(mediaDir)
+            return
+        nfoFilepath = os.path.join(mediaDir, nfoFilename)
+        self.writeNfoFile(nfoFilepath, root)
 
     def targetDirHook(self, targetDir, tmdbidstr='', tmdbcat='', tmdbtitle='', tmdbobj=None):
         # exportTargetDir = os.path.join(ARGS.hd_path, targetDir)
@@ -789,6 +856,7 @@ class Torcp:
                                                         p.season)
                     self.targetCopy(mediaSrc, seasonFolderFullPath, newTVFileName)
                     self.mkPlexMatch(os.path.join(self.ARGS.tv_folder_name, destFolderName), p)
+                    self.mkMediaNfo(os.path.join(self.ARGS.tv_folder_name, destFolderName), "", p)
                     self.targetDirHook(os.path.join(self.ARGS.tv_folder_name, destFolderName), tmdbidstr=str(p.tmdbid), tmdbcat=p.tmdbcat, tmdbtitle=p.title, tmdbobj=p)
                 elif cat == self.CATNAME_MOVIE:
                     if self.ARGS.origin_name:
@@ -803,6 +871,7 @@ class Torcp:
                                                         yearstr, p.resolution,
                                                         p.group, nameParser=p)
                     self.targetCopy(mediaSrc, destCatFolderName, newMovieName)
+                    self.mkMediaNfo(destCatFolderName, newMovieName, p)
                     self.targetDirHook(destCatFolderName, tmdbidstr=str(p.tmdbid), tmdbcat=p.tmdbcat, tmdbtitle=p.title, tmdbobj=p)
                 elif cat == 'TMDbNotFound':
                     self.targetCopy(mediaSrc, cat)
@@ -966,6 +1035,9 @@ class Torcp:
         parser.add_argument('--make-plex-match',
                             action='store_true',
                             help='Create a .plexmatch file at the top level of a series')
+        parser.add_argument('--make-nfo',
+                            action='store_true',
+                            help='Create a .nfo file in the media dir')
         parser.add_argument('--after-copy-script',
                             default='',
                             help='call this script with destination folder path after link/move')
@@ -989,7 +1061,7 @@ class Torcp:
     def hasTMDbId(self, str):
         m1 = re.search(r'tmdb(id)?[=-]((m|tv)?-?(\d+))', str.strip(), flags=re.A | re.I)
         if m1:
-            return m1[2]
+            return m1[4]
         else:
             return None
 
@@ -1017,7 +1089,7 @@ class Torcp:
         else:
             return None
 
-    def onlyOneDirInSiteIdFolder(self, cpLocation, foldername):
+    def underSiteIdFolder(self, cpLocation, foldername):
         siteid = self.matchSiteId(foldername)
         if siteid:
             # dirlist = [name for name in os.listdir(os.path.join(cpLocation, foldername)) if os.path.isdir(os.path.join(cpLocation, foldername, name))]
@@ -1026,7 +1098,7 @@ class Torcp:
                 return siteid, dirlist[0]
         return '', ''
 
-    def onlyOneDirInIMDbFolder(self, cpLocation, foldername):
+    def underIMDbFolder(self, cpLocation, foldername):
         imdbstr = self.hasIMDbId(foldername)
         if imdbstr:
             dirlist = os.listdir(os.path.join(cpLocation, foldername))
@@ -1037,7 +1109,7 @@ class Torcp:
                 # return imdbstr, dirlist[0]
         return '', ''
 
-    def onlyOneDirInTMDbFolder(self, cpLocation, foldername):
+    def underTMDbFolder(self, cpLocation, foldername):
         tmdbstr = self.hasTMDbId(foldername)
         if tmdbstr:
             dirlist = os.listdir(os.path.join(cpLocation, foldername))
@@ -1046,9 +1118,9 @@ class Torcp:
         return '', ''
 
     def parseFolderIMDbId(self, locIn, itemIn):
-        siteid, insideSiteFolderName = self.onlyOneDirInSiteIdFolder(locIn, itemIn)
-        folderIMDb, insideIMDbFolderName = self.onlyOneDirInIMDbFolder(locIn, itemIn)
-        folderTMDb, insideTMDbFolderName = self.onlyOneDirInTMDbFolder(locIn, itemIn)
+        siteid, insideSiteFolderName = self.underSiteIdFolder(locIn, itemIn)
+        folderIMDb, insideIMDbFolderName = self.underIMDbFolder(locIn, itemIn)
+        folderTMDb, insideTMDbFolderName = self.underTMDbFolder(locIn, itemIn)
         if folderIMDb:
             parentLocation = os.path.join(locIn, itemIn)
             itemName = insideIMDbFolderName
@@ -1062,6 +1134,10 @@ class Torcp:
             parentLocation = locIn
             itemName = itemIn
         return parentLocation, itemName, folderIMDb, folderTMDb
+
+    def processWithSameTIMDb(self, parentFolder, folderImdb, folderTmdb):
+        for item in os.listdir(parentFolder):
+            self.processOneDirItem(parentFolder, item, imdbidstr=folderImdb, tmdbidstr=folderTmdb)
 
     def main(self, argv=None, exportObject=None):
         self.EXPORT_OBJ = exportObject
@@ -1091,6 +1167,8 @@ class Torcp:
                                 os.path.basename(os.path.normpath(cpLocation)))
                 if argIMDb or argTMDb:
                     self.processOneDirItem(parentLocation, itemName, imdbidstr=argIMDb, tmdbidstr=argTMDb)
+                elif folderimdb or folderTmdb:
+                    self.processWithSameTIMDb(parentLocation, folderImdb=folderimdb, folderTmdb=folderTmdb)
                 else:
                     self.processOneDirItem(parentLocation, itemName, imdbidstr=folderimdb, tmdbidstr=folderTmdb)
 
@@ -1120,6 +1198,9 @@ class Torcp:
                                 continue
                             else:
                                 searchCache.append(itemName)
+                    if (folderimdb or folderTmdb) and (parentLocation != cpLocation):
+                        self.processWithSameTIMDb(parentLocation, folderImdb=folderimdb, folderTmdb=folderTmdb)
+                    else:
                         self.processOneDirItem(parentLocation, itemName, imdbidstr=folderimdb, tmdbidstr=folderTmdb)
 
         if self.ARGS.cache:

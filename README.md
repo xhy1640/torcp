@@ -14,6 +14,9 @@
 * [刮削攻略](刮削攻略.md)
 
 ## 2 Last Update
+* 2023.5.24 对于包括 tmdbid=12345/tmdb-12345 的文件夹，都以目录中所包含的标识，对目录下的各文件/目录进行刮削
+> 即对于 siteid 和刮削完成后的包含Emby/Plex括号的文件夹，都会进入对所有文件进行处理
+* 2023.4.9  `--make-nfo` 在媒体目录内生成 .nfo 文件
 * 2023.3.22 在资源目录之上，如果有一个目录名中带有 `tmdb=tv-123456` 或 `tmdb=m-123456` 信息，则会进入目录以此信息对文件进行刮削
 * 2023.3.20 改为 logger 输出；参考 `tp.py` 设置输出目标和格式
 * 2023.2.7 `--sep-area` 所有地区分目录，不可与语言 `--lang` 同时使用
@@ -77,7 +80,7 @@ python3 tp.py -h
 
 usage: tp.py [-h] -d HD_PATH [-e KEEP_EXT] [-l LANG] [--genre GENRE] [--other-dir OTHER_DIR] [--sep-area] [--sep-area5] [--tmdb-api-key TMDB_API_KEY] [--tmdb-lang TMDB_LANG]
              [--tv-folder-name TV_FOLDER_NAME] [--movie-folder-name MOVIE_FOLDER_NAME] [--tv] [--movie] [--dryrun] [--single] [--extract-bdmv] [--full-bdmv] [--origin-name] [--tmdb-origin-name]
-             [--sleep SLEEP] [--move-run] [--make-log] [--symbolink] [--cache] [--emby-bracket] [--filename-emby-bracket] [--plex-bracket] [--make-plex-match]
+             [--sleep SLEEP] [--move-run] [--make-log] [--symbolink] [--cache] [--emby-bracket] [--filename-emby-bracket] [--plex-bracket] [--make-plex-match] [--make-nfo]
              [--after-copy-script AFTER_COPY_SCRIPT] [--imdbid IMDBID] [--tmdbid TMDBID] [--site-str SITE_STR]
              MEDIA_DIR
 
@@ -124,6 +127,7 @@ options:
                         filename with emby bracket
   --plex-bracket        ex: Alone (2020) {tmdb-509635}
   --make-plex-match     Create a .plexmatch file at the top level of a series
+  --make-nfo            Create a .nfo file in the media dir
   --after-copy-script AFTER_COPY_SCRIPT
                         call this script with destination folder path after link/move
   --imdbid IMDBID       specify the IMDb id, -s single mode only
